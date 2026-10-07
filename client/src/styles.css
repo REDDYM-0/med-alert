@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172b4d;
+  background: #f5f7fa;
+  font-size: 16px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #f5f7fa; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 3px solid rgba(232, 65, 79, 0.45);
+  outline-offset: 2px;
+}
+::selection { background: #ffe1e3; color: #172b4d; }
+
+.app-shell { min-height: 100vh; }
+.page-enter { animation: page-enter 180ms ease-out both; }
+.card-surface { box-shadow: 0 8px 28px rgba(23, 43, 77, 0.055); }
+.card-interactive { transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.card-interactive:hover { border-color: #e7dadd; box-shadow: 0 12px 30px rgba(23, 43, 77, 0.09); transform: translateY(-2px); }
+.emergency-panel { box-shadow: 0 18px 48px rgba(23, 43, 77, 0.1); }
+.emergency-critical { background: linear-gradient(110deg, #dc3545, #ed4b58); }
+.assistant-loading-dot { animation: assistant-pulse 1s ease-in-out infinite; }
+.assistant-loading-dot:nth-child(2) { animation-delay: 140ms; }
+.assistant-loading-dot:nth-child(3) { animation-delay: 280ms; }
+.button-feedback { transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+.button-feedback:active:not(:disabled) { transform: translateY(1px); }
+.soft-grid {
+  background-image: radial-gradient(#dbe2eb 0.7px, transparent 0.7px);
+  background-size: 17px 17px;
+}
+.scrollbar-hidden { scrollbar-width: none; }
+.scrollbar-hidden::-webkit-scrollbar { display: none; }
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes assistant-pulse {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .card-interactive:hover, .button-feedback:active:not(:disabled) { transform: none; }
+}
+
+@media print {
+  @page { margin: 12mm; }
+  body * { visibility: hidden !important; }
+  .medical-id-print,
+  .medical-id-print * { visibility: visible !important; }
+  .medical-id-print {
+    position: fixed !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-color: #94a3b8 !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .medical-id-print .bg-ink { background: #172b4d !important; }
+  .medical-id-print .bg-brand { background: #e8414f !important; }
+  .medical-id-hide-print { display: none !important; }
+  .page-enter { animation: none !important; transform: none !important; }
+}
