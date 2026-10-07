@@ -51,7 +51,9 @@ The Digital Medical ID is rendered in the browser from the existing Medical Prof
 
 ## Deploy to Vercel
 
-Import this project into Vercel and configure the project root as the repository root. Set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` in the Vercel project environment variables. The root `vercel.json` builds the Vite client and serves the Express API as a Vercel function on the same origin.
+Import this project into Vercel with the repository root as the project root. The root `vercel.json` defines two Vercel Services: the Vite client rooted at `client` and the Express API rooted at `server`. Requests to `/api/*` are routed to the server; all other requests, including `/medical-profile`, go to the client. No service bindings are needed because the client calls the API through same-origin `/api/...` URLs.
+
+Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) in the Vercel environment for the server. The key is read only by the Express backend and must not be given a `VITE_` prefix.
 
 ## Data and medical safety
 
