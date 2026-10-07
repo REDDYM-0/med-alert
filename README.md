@@ -41,9 +41,22 @@ Set the local emergency services number in Emergency Mode. The number is saved i
 
 Open `/medical-profile` to create or update the patient's profile. All profile fields use the single `med-alert-profile` local-storage entry; the Dashboard, Emergency Mode, and Digital Medical ID read from the same profile. Clearing the form removes that saved entry from this browser.
 
-## Tirupati hospital directory
+## Locality-Based Medical Facility Directory
 
-The Tirupati Hospitals directory is maintained as static local data in `client/src/hospitals.js`. It does not use GPS or a maps API; Directions links open Google Maps using each hospital's name and address. Phone numbers and emergency availability are shown only for facilities with those details recorded in the data file.
+Med Alert includes a locality-based medical facility directory designed to help users find relevant hospitals, clinics, and other medical facilities according to their selected or available locality context.
+
+The current MVP contains a limited set of sample facility information for demonstration purposes. The feature is not restricted to any single city or locality. As the project is expanded, facility information can be added for different locations so that users can access relevant medical resources based on their locality.
+
+The directory can provide useful information such as:
+
+- Medical facility name
+- Facility type
+- Address or locality
+- Contact information, where available
+- Navigation or map access
+- Emergency-related information, where available
+
+The current sample dataset should be treated as demonstration data rather than a complete or continuously updated medical-facility directory.
 
 ## Digital Medical ID
 
