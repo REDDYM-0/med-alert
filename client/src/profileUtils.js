@@ -105,3 +105,24 @@ export function buildEmergencyText(profile) {
     `Emergency contact phone: ${exportFields.emergencyContactPhone || "Not provided"}`,
   ].join("\n");
 }
+
+export function buildQrPayload(profile) {
+  const exportFields = buildEmergencyExport(profile);
+  return {
+    v: 1,
+    type: "MED_ALERT_EMERGENCY_ID",
+    fullName: exportFields.fullName || "",
+    bloodGroup: exportFields.bloodGroup || "",
+    allergies: exportFields.allergies || "",
+    conditions: exportFields.conditions || "",
+    medications: exportFields.medications || "",
+    emergencyContactName: exportFields.emergencyContactName || "",
+    emergencyContactPhone: exportFields.emergencyContactPhone || "",
+  };
+}
+
+export function buildQrText(profile) {
+  const payload = buildQrPayload(profile);
+  return JSON.stringify(payload, null, 2);
+}
+
