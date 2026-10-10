@@ -6,7 +6,7 @@ import {
   Printer, Search, Save, Share2, Shield, ShieldAlert, UserRound, X,
 } from "lucide-react";
 import { DEMO_PROFILE, EMPTY_PROFILE, GUIDE_LAST_REVIEWED, GUIDES, QUICK_CARDS, TIRUPATI_EMERGENCY_CONTACTS } from "./data";
-import { TIRUPATI_HOSPITALS } from "./hospitals";
+import { ALL_HOSPITALS, CITIES, TIRUPATI_HOSPITALS } from "./hospitals";
 import { buildEmergencyExport, buildEmergencyText, calculateProfileCompleteness, normalizeMedicalText, normalizeNoneKnown, parseAllergies } from "./profileUtils";
 import { translations } from "./translations";
 
@@ -275,11 +275,32 @@ function HospitalCards({ hospitals }) {
   </div>;
 }
 
-function HospitalDirectory() {
+function HospitalDirectory({ t }) {
+  const [selectedCity, setSelectedCity] = useState(() => {
+    try {
+      return sessionStorage.getItem("med-alert-selected-city") || "";
+    } catch {
+      return "";
+    }
+  });
   const [search, setSearch] = useState("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
   const mapsFallback = "https://www.google.com/maps/search/?api=1&query=hospital%20near%20me";
+
+  function handleCityChange(cityId) {
+    setSelectedCity(cityId);
+    try {
+      if (cityId) {
+        sessionStorage.setItem("med-alert-selected-city", cityId);
+      } else {
+        sessionStorage.removeItem("med-alert-selected-city");
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
   function findNearest() {
     const mapWindow = window.open("about:blank", "_blank");
     if (mapWindow) mapWindow.opener = null;
@@ -305,32 +326,92 @@ function HospitalDirectory() {
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
     );
   }
-  const visibleHospitals = TIRUPATI_HOSPITALS.filter((hospital) => {
+
+  const activeCity = CITIES.find((c) => c.id === selectedCity);
+  const activeCityLabel = selectedCity ? (t?.cities?.[selectedCity] || activeCity?.label || selectedCity) : "";
+
+  const cityHospitals = selectedCity
+    ? ALL_HOSPITALS.filter((h) => h.cityId === selectedCity)
+    : [];
+
+  const visibleHospitals = cityHospitals.filter((hospital) => {
     const matchesSearch = `${hospital.name} ${hospital.address} ${(hospital.specialties || []).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase());
     return matchesSearch && (!emergencyOnly || Boolean(hospital.emergencyAvailability));
   });
 
   return <div className="mx-auto max-w-6xl">
-    <SectionTitle eyebrow="Tirupati, Andhra Pradesh" title="Tirupati Hospitals" description="Hospital addresses and contact details available in this directory. Confirm availability directly with the hospital when needed. Location is sent to Google Maps only when you tap Nearest hospital and is not saved by Med Alert." action={<Button variant="outline" onClick={findNearest}><MapPin size={17} />Nearest hospital</Button>} />
+    <SectionTitle
+      eyebrow={selectedCity ? activeCityLabel : (t?.hospitalDirectory || "Hospital Directory")}
+      title={selectedCity ? `${t?.hospitalsIn || "Hospitals in"} ${activeCityLabel}` : (t?.hospitalDirectory || "Hospital Directory")}
+      description="Select a city to view local medical facilities. Confirm emergency availability directly with the hospital when needed. Location is sent to Google Maps only when you tap Nearest hospital and is not saved by Med Alert."
+      action={<Button variant="outline" onClick={findNearest}><MapPin size={17} />Nearest hospital</Button>}
+    />
+
     {locationMessage && <p role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{locationMessage} <a className="font-bold underline" href={mapsFallback} target="_blank" rel="noreferrer">Open Maps search</a></p>}
-    <section aria-label="Search and filter hospitals" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex sm:items-center sm:gap-4">
-      <label className="relative block min-w-0 flex-1">
-        <span className="sr-only">Search hospitals</span>
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by hospital or address" className="min-h-11 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-4 focus:ring-rose-100" />
-      </label>
-      <label className="mt-3 flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700 sm:mt-0 sm:shrink-0">
-        <input type="checkbox" checked={emergencyOnly} onChange={(event) => setEmergencyOnly(event.target.checked)} className="h-4 w-4 accent-[#e8414f]" />
-        Emergency availability listed
-      </label>
+
+    <section aria-label="City Selection" className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <label htmlFor="hospital-city-select" className="text-sm font-bold text-slate-700">
+          {t?.selectCity || "Select City"}
+        </label>
+        <div className="relative min-w-[240px] flex-1 sm:max-w-xs">
+          <select
+            id="hospital-city-select"
+            aria-label={t?.selectCity || "Select City"}
+            value={selectedCity}
+            onChange={(e) => handleCityChange(e.target.value)}
+            className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-brand focus:ring-4 focus:ring-rose-100"
+          >
+            <option value="">{t?.selectCityPrompt || "-- Select City --"}</option>
+            {CITIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {t?.cities?.[c.id] || c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
     </section>
-    {visibleHospitals.length > 0
-      ? <HospitalCards hospitals={visibleHospitals} />
-      : <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center">
-        <Building2 className="mx-auto text-slate-400" size={26} />
-        <h2 className="mt-3 font-bold text-ink">No hospitals match your search</h2>
-        <p className="mt-1 text-sm text-slate-500">{emergencyOnly ? "No other hospitals in this directory have confirmed emergency availability." : "Try a different hospital name or address."}</p>
-      </div>}
+
+    {!selectedCity ? (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center shadow-sm">
+        <Building2 className="mx-auto text-slate-400" size={32} />
+        <h2 className="mt-3 text-lg font-bold text-ink">{t?.selectCityInstruction || "Select a city to view available hospitals."}</h2>
+        <p className="mt-1 text-sm text-slate-500">Choose a city from the dropdown above to view genuine medical facilities.</p>
+      </div>
+    ) : (
+      <>
+        <section aria-label="Search and filter hospitals" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex sm:items-center sm:gap-4">
+          <label className="relative block min-w-0 flex-1">
+            <span className="sr-only">Search hospitals</span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by hospital or address" className="min-h-11 w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-4 focus:ring-rose-100" />
+          </label>
+          <label className="mt-3 flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700 sm:mt-0 sm:shrink-0">
+            <input type="checkbox" checked={emergencyOnly} onChange={(event) => setEmergencyOnly(event.target.checked)} className="h-4 w-4 accent-[#e8414f]" />
+            Emergency availability listed
+          </label>
+        </section>
+
+        {visibleHospitals.length > 0 ? (
+          <HospitalCards hospitals={visibleHospitals} />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center">
+            <Building2 className="mx-auto text-slate-400" size={26} />
+            <h2 className="mt-3 font-bold text-ink">
+              {cityHospitals.length === 0
+                ? (t?.noHospitalsInCity || "No hospitals found for the selected city.")
+                : "No hospitals match your search"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {cityHospitals.length === 0
+                ? "Try selecting another city from the dropdown."
+                : (emergencyOnly ? "No other hospitals in this city have confirmed emergency availability." : "Try a different hospital name or address.")}
+            </p>
+          </div>
+        )}
+      </>
+    )}
   </div>;
 }
 
@@ -871,7 +952,7 @@ function App() {
   const content = page === "dashboard" ? <Dashboard profile={profile} profileSaved={profileSaved} navigate={navigate} openGuide={openGuide} /> :
     page === "emergency" ? <Emergency profile={profile} openGuide={openGuide} navigate={navigate} t={t} /> :
     page === "profile" ? <Profile profile={profile} profileSaved={profileSaved} updateProfile={updateProfile} saveProfile={saveProfile} clearProfile={clearProfile} resetDemo={resetDemo} message={profileMessage} error={profileError} pinRecord={pinRecord} privateUnlocked={privateUnlocked} protectProfile={protectProfile} unlockPrivate={unlockPrivate} removePin={removePin} /> :
-    page === "hospitals" ? <HospitalDirectory /> :
+    page === "hospitals" ? <HospitalDirectory t={t} /> :
     page === "medical-id" ? <MedicalId profile={profile} navigate={navigate} /> :
     page === "guide" ? <GuidePage guide={activeGuide} onOpen={(id) => id ? openGuide(id) : navigate("guide")} /> :
     page === "assistant" ? <Assistant messages={messages} input={chatInput} setInput={setChatInput} loading={chatLoading} error={chatError} onSend={sendMessage} onClear={() => { setMessages([]); setChatError(""); setEmergencyAlert(false); }} endRef={chatEndRef} emergencyAlert={emergencyAlert} online={online} /> :
