@@ -815,14 +815,46 @@ function App() {
     if (!message || chatLoading) return;
     setChatInput("");
     setChatError("");
-    setEmergencyAlert(EMERGENCY_KEYWORDS.test(message));
+    const isEmergency = EMERGENCY_KEYWORDS.test(message);
+    // Show emergency warning immediately, before any API call.
+    setEmergencyAlert(isEmergency);
     const nextMessages = [...messages, { role: "user", text: message }];
     setMessages(nextMessages);
-    const isEmergency = EMERGENCY_KEYWORDS.test(message);
-    const reply = isEmergency
-      ? "Call 108 now and follow the emergency dispatcher’s instructions. Stay with the person and do not give medicines unless a qualified professional directs you. This app cannot diagnose or prescribe; see a doctor."
-      : "I can provide general first-aid information only. I cannot diagnose a condition or recommend medicines or dosages. For medical concerns, contact a doctor. If this may be an emergency, call 108 now.";
-    setMessages([...nextMessages, { role: "assistant", text: reply }]);
+
+    if (!online) {
+      const offlineReply = isEmergency
+        ? "Call 108 now and follow the emergency dispatcher’s instructions. Stay with the person. This app cannot diagnose or prescribe."
+        : "You are offline. If this may be an emergency, call 108. This app cannot diagnose or recommend medicines.";
+      setMessages([...nextMessages, { role: "assistant", text: offlineReply }]);
+      return;
+    }
+
+    setChatLoading(true);
+    try {
+      // Only the user question and prior pairs are sent. No profile data is attached.
+      const response = await fetch("/api/medical-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history: nextMessages.slice(0, -1) }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.reply) {
+        setChatError(data?.error || "The assistant could not respond. If this is urgent, call 108.");
+        setMessages(nextMessages);
+      } else {
+        setMessages([...nextMessages, { role: "assistant", text: data.reply }]);
+        setChatError("");
+      }
+    } catch (error) {
+      const isTimeout = error.name === "TimeoutError" || error.name === "AbortError";
+      setChatError(isTimeout
+        ? "The assistant took too long. If this is urgent, call 108 now."
+        : "Could not reach the assistant. Check your connection, or call 108 if this is urgent.");
+      setMessages(nextMessages);
+    } finally {
+      setChatLoading(false);
+    }
   }
 
   function changeLanguage(value) {

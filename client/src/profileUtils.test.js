@@ -28,7 +28,7 @@ test("normalizeNoneKnown maps legacy values to the canonical no-known state", ()
   assert.equal(normalizeNoneKnown("Asthma"), "Asthma");
 });
 
-test("buildEmergencyExport only includes the approved emergency fields", () => {
+test("buildEmergencyExport only includes the approved emergency fields and excludes private fields", () => {
   const value = buildEmergencyExport({
     fullName: "Alex Morgan",
     bloodGroup: "O+",
@@ -37,8 +37,11 @@ test("buildEmergencyExport only includes the approved emergency fields", () => {
     medications: "No known medications",
     emergencyContactName: "Jamie",
     emergencyContactPhone: "555-010-2020",
+    dateOfBirth: "1990-01-01",
     doctorName: "Dr. Reed",
-    notes: "Private note",
+    doctorPhone: "555-010-3030",
+    notes: "Private notes here",
+    gender: "Other",
   });
 
   assert.deepEqual(value, {
@@ -50,6 +53,11 @@ test("buildEmergencyExport only includes the approved emergency fields", () => {
     emergencyContactName: "Jamie",
     emergencyContactPhone: "555-010-2020",
   });
+  assert.equal(value.dateOfBirth, undefined);
+  assert.equal(value.doctorName, undefined);
+  assert.equal(value.doctorPhone, undefined);
+  assert.equal(value.notes, undefined);
+  assert.equal(value.gender, undefined);
 });
 
 test("calculateProfileCompleteness reports completed emergency fields and a progress percentage", () => {

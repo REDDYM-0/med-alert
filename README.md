@@ -1,56 +1,90 @@
-# Med Alert
+# Med Alert 2.0
 
-A responsive emergency medical information dashboard. Profile data is stored only in this browser's local storage; optional PIN protection encrypts private details on this device. The app does not send profile or assistant messages to a server.
+A responsive, privacy-conscious emergency medical information web application (PWA). Profile data is stored only in the browser's local storage; optional PIN protection encrypts private details on the device.
 
 ## Requirements
 
 - Node.js 18 or newer
-- A modern browser with Web Crypto support for optional PIN protection
+- A modern browser with Web Crypto support for PIN protection
+- Google Gemini API key (`GEMINI_API_KEY`) for AI Medical Assistant features
 
-## Run locally
+## Architecture & Data Flow
 
-From the repository root:
+- **Frontend**: React + Vite single page application with PWA capabilities.
+- **Backend API**: Express.js server providing `/api/medical-assistant` endpoint to interface securely with Google Gemini.
+- **Privacy & Storage**: 
+  - Medical profile data stays in browser `localStorage`.
+  - Emergency fields (`fullName`, `bloodGroup`, `allergies`, `conditions`, `medications`, `emergencyContactName`, `emergencyContactPhone`) remain unencrypted for fast access during emergencies.
+  - Private fields (`dateOfBirth`, `doctorName`, `doctorPhone`, `notes`, `gender`) can be encrypted using PBKDF2 + AES-GCM when PIN protection is enabled.
+  - Profile data is **never** sent to the AI backend or any third-party server.
+  - AI Assistant queries contain only the user's chat message and prior conversation turns.
 
+## Run Locally
+
+1. Install dependencies for client and server:
 ```sh
-npm install --prefix client
+cd client && npm install
+cd ../server && npm install
+```
+
+2. Set environment variable:
+```sh
+# On Windows PowerShell
+$env:GEMINI_API_KEY="your-gemini-api-key"
+
+# On Linux/macOS
+export GEMINI_API_KEY="your-gemini-api-key"
+```
+
+3. Start dev servers:
+```sh
+# Start backend server
+npm start --prefix server
+
+# In another terminal, start client
 npm run dev --prefix client
 ```
 
-Open the Vite URL shown in the terminal. Assistant responses are local general safety guidance; no assistant API request is made.
+When `GEMINI_API_KEY` is set, online AI assistant queries invoke the backend service. If offline or if the backend is unreachable, the assistant gracefully falls back to local general safety guidance.
 
-## Emergency number
+## Testing
 
-Emergency Mode uses the India emergency number 108 (`tel:108`).
+Run unit test suites for client and server:
 
-## Medical profile
+```sh
+# Run client unit tests
+npm test --prefix client
 
-Open `/medical-profile` to create or update the patient's profile. Emergency details remain readable in local storage for responders; date of birth, doctor details, and notes can be encrypted with a PIN. Forgotten PINs cannot be recovered. The Dashboard, Emergency Mode, and Digital Medical ID use emergency details saved on this device.
+# Run server unit tests
+npm test --prefix server
+```
+
+## Emergency Number & Guidance
+
+- Emergency Mode defaults to India emergency number **108** (`tel:108`).
+- First-aid guidance summaries in `client/src/data.js` cover 8 emergency scenarios (CPR, Choking, Bleeding, Burns, Seizures, Fractures, Heat Stroke, Poisoning).
+> **Note**: Guide content is provided for demonstration and general information; content is marked `// Needs verification` and requires formal clinical review prior to medical deployment.
+
+## Multilingual Support
+
+- Supports **English** and **Telugu** (`te`).
+- Language selector is accessible from the top navigation bar.
+> **Note**: Telugu translations were generated for UI components and require review by a native speaker before production release.
 
 ## Locality-Based Medical Facility Directory
 
-Med Alert includes a locality-based medical facility directory designed to help users find relevant hospitals, clinics, and other medical facilities according to their selected or available locality context.
-
-The current MVP contains a limited set of sample facility information for demonstration purposes. The feature is not restricted to any single city or locality. As the project is expanded, facility information can be added for different locations so that users can access relevant medical resources based on their locality.
-
-The directory can provide useful information such as:
-
-- Medical facility name
-- Facility type
-- Address or locality
-- Contact information, where available
-- Navigation or map access
-- Emergency-related information, where available
-
-The current sample dataset should be treated as demonstration data rather than a complete or continuously updated medical-facility directory.
+Med Alert includes a sample locality-based medical facility directory to display nearby emergency facilities. Location permissions are requested only upon user action (e.g., clicking "Find Nearby Hospitals") and open external Google Maps queries. Med Alert does not record or transmit location data.
 
 ## Digital Medical ID
 
-The Digital Medical ID and QR code are generated in the browser. The QR code contains only emergency fields in readable form. Print / Save PDF, download, copy, and share actions are user-initiated; anyone scanning a printed or shared QR can read those details.
+The Digital Medical ID renders a printable card and downloadable QR code. The QR payload includes **only approved emergency fields** and explicitly excludes private fields (`notes`, `dateOfBirth`, `doctorName`, `doctorPhone`, `gender`).
 
 ## Deploy to Vercel
 
-Import this project into Vercel with the repository root as the project root. The root `vercel.json` serves only the Vite client; no server, API key, or service binding is required.
+Import this repository into Vercel. The included `vercel.json` automatically routes `/api/*` endpoints to the Express serverless function at `api/[...path].js` and all other paths to the Vite SPA build.
 
-## Data and medical safety
+Ensure `GEMINI_API_KEY` is added to your Vercel Project Environment Variables.
 
-Emergency information is stored unencrypted in browser local storage so it can be read without a PIN. Private details are encrypted with PBKDF2 and AES-GCM when PIN protection is enabled. Assistant messages stay on-device. Location is requested only after tapping the nearest-hospital action and is used to open a Google Maps search; Med Alert does not save it. Do not use this application as a substitute for emergency services or professional medical care.
+## Medical Safety Disclaimer
+
+Med Alert provides general emergency information and visual medical identification. It does not replace professional medical advice, diagnosis, or emergency services.
