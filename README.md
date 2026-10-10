@@ -1,45 +1,30 @@
 # Med Alert
 
-A responsive emergency medical information dashboard. The medical profile and emergency number are stored only in this browser's local storage. The Gemini API key is used only by the Express backend.
+A responsive emergency medical information dashboard. Profile data is stored only in this browser's local storage; optional PIN protection encrypts private details on this device. The app does not send profile or assistant messages to a server.
 
 ## Requirements
 
 - Node.js 18 or newer
-- A Google Gemini API key to use the AI assistant
+- A modern browser with Web Crypto support for optional PIN protection
 
 ## Run locally
 
-In one terminal (from the repository root):
-
-```sh
-npm install --prefix server
-npm run dev --prefix server
-```
-
-In another terminal (from the repository root):
+From the repository root:
 
 ```sh
 npm install --prefix client
 npm run dev --prefix client
 ```
 
-Open the Vite URL shown in the terminal. The Vite development server proxies `/api` requests to Express on port 3001.
-
-Create `server/.env` from `server/.env.example` and set `GEMINI_API_KEY` to enable the AI assistant. The API returns an explicit configuration error when the key is missing; it does not return a mock response.
-
-Run the API tests from the repository root with:
-
-```sh
-npm test --prefix server
-```
+Open the Vite URL shown in the terminal. Assistant responses are local general safety guidance; no assistant API request is made.
 
 ## Emergency number
 
-Set the local emergency services number in Emergency Mode. The number is saved in this browser and used only for the `tel:` action. Med Alert does not assume a jurisdiction-specific emergency number.
+Emergency Mode uses the India emergency number 108 (`tel:108`).
 
 ## Medical profile
 
-Open `/medical-profile` to create or update the patient's profile. All profile fields use the single `med-alert-profile` local-storage entry; the Dashboard, Emergency Mode, and Digital Medical ID read from the same profile. Clearing the form removes that saved entry from this browser.
+Open `/medical-profile` to create or update the patient's profile. Emergency details remain readable in local storage for responders; date of birth, doctor details, and notes can be encrypted with a PIN. Forgotten PINs cannot be recovered. The Dashboard, Emergency Mode, and Digital Medical ID use emergency details saved on this device.
 
 ## Locality-Based Medical Facility Directory
 
@@ -60,14 +45,12 @@ The current sample dataset should be treated as demonstration data rather than a
 
 ## Digital Medical ID
 
-The Digital Medical ID is rendered in the browser from the existing Medical Profile in local storage. Print / Save PDF, download, copy, and share actions are user-initiated and do not publish the card to a Med Alert server. The ID includes sensitive health details; review it and share only when appropriate. No QR code is generated.
+The Digital Medical ID and QR code are generated in the browser. The QR code contains only emergency fields in readable form. Print / Save PDF, download, copy, and share actions are user-initiated; anyone scanning a printed or shared QR can read those details.
 
 ## Deploy to Vercel
 
-Import this project into Vercel with the repository root as the project root. The root `vercel.json` defines two Vercel Services: the Vite client rooted at `client` and the Express API rooted at `server`. Requests to `/api/*` are routed to the server; all other requests, including `/medical-profile`, go to the client. No service bindings are needed because the client calls the API through same-origin `/api/...` URLs.
-
-Set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) in the Vercel environment for the server. The key is read only by the Express backend and must not be given a `VITE_` prefix.
+Import this project into Vercel with the repository root as the project root. The root `vercel.json` serves only the Vite client; no server, API key, or service binding is required.
 
 ## Data and medical safety
 
-The medical profile is stored in browser local storage, not sent to the server. Messages sent to the AI assistant are sent to the configured Express backend and Gemini. Do not use this application as a substitute for emergency services or professional medical care.
+Emergency information is stored unencrypted in browser local storage so it can be read without a PIN. Private details are encrypted with PBKDF2 and AES-GCM when PIN protection is enabled. Assistant messages stay on-device. Location is requested only after tapping the nearest-hospital action and is used to open a Google Maps search; Med Alert does not save it. Do not use this application as a substitute for emergency services or professional medical care.

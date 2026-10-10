@@ -12,20 +12,9 @@
           "destination": "/index.html"
         }
       ]
-    },
-    "server": {
-      "root": "server",
-      "framework": "express",
-      "entrypoint": "app.js"
     }
   },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "server"
-      }
-    },
     {
       "source": "/(.*)",
       "destination": {

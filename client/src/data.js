@@ -59,23 +59,27 @@ export const EMPTY_PROFILE = {
 
 export const DEMO_PROFILE = {
   fullName: "Alex Morgan",
-  dateOfBirth: "1992-06-14",
+  dateOfBirth: "",
   gender: "",
   bloodGroup: "O+",
-  allergies: "Penicillin",
-  conditions: "Asthma",
-  medications: "Rescue inhaler",
+  allergies: "Peanuts, Lactose",
+  conditions: "None known",
+  medications: "None known",
   emergencyContactName: "Jamie Morgan",
   emergencyContactPhone: "555-010-2020",
   emergencyContactRelationship: "",
   doctorName: "Dr. Taylor Reed",
   doctorPhone: "555-010-4040",
-  notes: "Demo profile — replace with your own verified information.",
+  notes: "Demo profile — replace with your own information.",
 };
+
+export const GUIDE_LAST_REVIEWED = "2026-10-09";
 
 export const GUIDES = [
   {
     id: "chest-pain", title: "Chest pain", short: "Recognize warning signs and act quickly.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Heart Association — Heart attack warning signs (https://www.heart.org/en/health-topics/heart-attack/warning-signs-of-a-heart-attack)",
     icon: HeartPulse, tint: "rose",
     immediate: ["Call your local emergency services now, especially for pressure, tightness, or pain with breathlessness.", "Help the person rest in a comfortable position and stay with them.", "Note when symptoms began and share any known medicines or conditions with responders."],
     avoid: ["Do not drive them yourself if emergency services are available.", "Do not give food or drink, or delay the call to see if symptoms pass.", "Do not give medication unless a medical professional or dispatcher directs you."],
@@ -83,6 +87,8 @@ export const GUIDES = [
   },
   {
     id: "bleeding", title: "Severe bleeding", short: "Apply firm pressure while help is on the way.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Red Cross — First aid for bleeding (https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps/bleeding)",
     icon: Droplets, tint: "red",
     immediate: ["Call emergency services for severe bleeding.", "Press firmly on the wound with clean cloth or gauze; keep pressure steady.", "If blood soaks through, add more material without lifting the first layer."],
     avoid: ["Do not remove an embedded object; press around it.", "Do not repeatedly lift the cloth to check the wound.", "Do not apply a tourniquet unless trained or directed by emergency dispatch."],
@@ -90,6 +96,8 @@ export const GUIDES = [
   },
   {
     id: "choking", title: "Choking", short: "Act if they cannot breathe, speak, or cough.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Red Cross — Choking first aid (https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps/choking)",
     icon: Wind, tint: "blue",
     immediate: ["If the person cannot breathe, speak, or cough effectively, call emergency services or ask someone to call.", "Follow the dispatcher's instructions for age-appropriate choking first aid.", "If they become unresponsive, carefully lower them and begin CPR if trained."],
     avoid: ["Do not perform blind finger sweeps in the mouth.", "Do not give water or food while choking.", "Do not leave the person alone."],
@@ -97,6 +105,8 @@ export const GUIDES = [
   },
   {
     id: "burns", title: "Burns", short: "Cool the burn and protect the skin.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Red Cross — Burn first aid (https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps/burns)",
     icon: Flame, tint: "amber",
     immediate: ["Move away from the heat source if safe.", "Cool the burn under cool running water for 20 minutes; remove nearby jewelry or loose clothing.", "Cover loosely with a clean, non-fluffy dressing and seek medical advice."],
     avoid: ["Do not use ice, butter, creams, or adhesive dressings.", "Do not pull away clothing stuck to the skin or break blisters.", "Do not delay help for large, deep, chemical, or electrical burns."],
@@ -104,6 +114,8 @@ export const GUIDES = [
   },
   {
     id: "unconsciousness", title: "Unconsciousness", short: "Check responsiveness and breathing.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Red Cross — Unresponsive and unconsciousness first aid (https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps/unresponsive-and-unconsciousness)",
     icon: AlertTriangle, tint: "violet",
     immediate: ["Call emergency services and check whether the person responds and is breathing normally.", "If they are not breathing normally, begin CPR if trained and follow dispatcher guidance.", "If breathing normally and no serious injury is suspected, place them on their side and monitor."],
     avoid: ["Do not give anything to eat or drink.", "Do not leave them alone or assume they are asleep.", "Do not move them if a head, neck, or back injury is possible unless there is immediate danger."],
@@ -111,6 +123,8 @@ export const GUIDES = [
   },
   {
     id: "seizure", title: "Seizure", short: "Protect from injury and time the seizure.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Red Cross — Seizure first aid (https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps/seizure)",
     icon: Zap, tint: "purple",
     immediate: ["Time the seizure and move nearby hazards away.", "Cushion the head, loosen tight clothing around the neck, and stay with the person.", "When movements stop, check breathing and place them on their side if safe."],
     avoid: ["Do not restrain them or put anything in their mouth.", "Do not give food, drink, or medication until fully alert.", "Do not try to stop the movements."],
@@ -118,6 +132,8 @@ export const GUIDES = [
   },
   {
     id: "allergic-reaction", title: "Severe allergic reaction", short: "Treat breathing or swelling symptoms as urgent.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Red Cross — Severe allergic reaction first aid (https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps/allergic-reaction)",
     icon: ShieldAlert, tint: "orange",
     immediate: ["Call emergency services immediately for breathing difficulty, throat/tongue swelling, collapse, or rapidly worsening symptoms.", "If they have their own prescribed epinephrine auto-injector, help them use it as directed.", "Keep them still and monitor breathing; follow dispatcher instructions."],
     avoid: ["Do not wait to see whether severe symptoms improve.", "Do not make them stand or walk.", "Do not give another person's medication."],
@@ -125,6 +141,8 @@ export const GUIDES = [
   },
   {
     id: "stroke", title: "Stroke warning signs", short: "Remember face, arm, speech, time.",
+    // Needs verification: confirm this content against the cited guidance before release.
+    source: "American Heart Association — Stroke symptoms (https://www.stroke.org/en/about-stroke/stroke-symptoms)",
     icon: Activity, tint: "teal",
     immediate: ["Call emergency services immediately; note the time symptoms started or when they were last well.", "Check for face drooping, arm weakness, or speech difficulty.", "Stay with them and keep them comfortable while waiting for responders."],
     avoid: ["Do not wait for symptoms to improve or drive if emergency services are available.", "Do not give food, drink, or medication.", "Do not let them sleep it off."],
