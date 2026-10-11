@@ -682,6 +682,630 @@ function MedicalId({ profile, navigate, t }) {
   </div>;
 }
 
+function App() {
+  const [initialRoute] = useState(() => readRoute(window.location.hash, window.location.pathname));
+  const [page, setPage] = useState(initialRoute.page);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [initialProfile] = useState(() => readStored(PROFILE_KEY, {}));
+  const [initialPrivate] = useState(() => readStored(PRIVATE_KEY, null));
+  const [initialLanguage] = useState(() => readStoredString(LANGUAGE_KEY, "en"));
+  const pinConfigured = Boolean(initialPrivate.value?.salt && initialPrivate.value?.iv && initialPrivate.value?.ciphertext);
+  const [profile, setProfile] = useState(() => {
+    const storedProfile = normalizeProfile(initialProfile.value);
+    return pinConfigured ? { ...EMPTY_PROFILE, ...selectFields(storedProfile, EMERGENCY_FIELDS) } : storedProfile;
+  });
+  const [profileSaved, setProfileSaved] = useState(() => hasProfileData(normalizeProfile(initialProfile.value)));
+  const [pinRecord, setPinRecord] = useState(() => pinConfigured ? initialPrivate.value : null);
+  const [privateUnlocked, setPrivateUnlocked] = useState(() => !pinConfigured);
+  const pinKeyRef = useRef(null);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [storageError, setStorageError] = useState(() => [initialProfile.error, initialPrivate.error, initialLanguage.error].filter(Boolean).join(" "));
+  const [language, setLanguage] = useState(() => initialLanguage.value === "te" ? "te" : "en");
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [offlineReady, setOfflineReady] = useState(() => Boolean(navigator.serviceWorker?.controller));
+  const [selectedGuide, setSelectedGuide] = useState(initialRoute.guideId);
+  const [messages, setMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const [emergencyAlert, setEmergencyAlert] = useState(false);
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    const onLocationChange = () => {
+      const route = readRoute(window.location.hash, window.location.pathname);
+      if (page === "profile" && route.page !== "profile" && pinRecord) {
+        pinKeyRef.current = null;
+        setPrivateUnlocked(false);
+        setProfile((current) => ({ ...current, ...selectFields(EMPTY_PROFILE, PRIVATE_FIELDS) }));
+      }
+      setPage(route.page);
+      setSelectedGuide(route.guideId);
+      setMobileOpen(false);
+    };
+    window.addEventListener("hashchange", onLocationChange);
+    window.addEventListener("popstate", onLocationChange);
+    return () => {
+      window.removeEventListener("hashchange", onLocationChange);
+      window.removeEventListener("popstate", onLocationChange);
+    };
+  }, [page, pinRecord]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, chatLoading]);
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+    const updateOfflineStatus = () => setOfflineReady(Boolean(navigator.serviceWorker.controller));
+    navigator.serviceWorker.addEventListener("controllerchange", updateOfflineStatus);
+    navigator.serviceWorker.ready.then(updateOfflineStatus).catch((error) => {
+      console.error("Med Alert offline support could not be activated.", error);
+    });
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", updateOfflineStatus);
+  }, []);
+
+  const activeGuide = useMemo(() => GUIDES.find((guide) => guide.id === selectedGuide), [selectedGuide]);
+
+  function navigate(nextPage) {
+    if (page === "profile" && nextPage !== "profile" && pinRecord) {
+      pinKeyRef.current = null;
+      setPrivateUnlocked(false);
+      setProfile((current) => ({ ...current, ...selectFields(EMPTY_PROFILE, PRIVATE_FIELDS) }));
+    }
+    setPage(nextPage);
+    setMobileOpen(false);
+    setSelectedGuide(null);
+    const destination = nextPage === "profile" ? "/medical-profile" : `/#${nextPage}`;
+    window.history.pushState(null, "", destination);
+  }
+
+  function openGuide(id) {
+    if (!GUIDES.some((guide) => guide.id === id)) {
+      navigate("guide");
+      return;
+    }
+    if (page === "profile" && pinRecord) {
+      pinKeyRef.current = null;
+      setPrivateUnlocked(false);
+      setProfile((current) => ({ ...current, ...selectFields(EMPTY_PROFILE, PRIVATE_FIELDS) }));
+    }
+    setPage("guide");
+    setMobileOpen(false);
+    setSelectedGuide(id);
+    window.history.pushState(null, "", `/#guide/${id}`);
+  }
+
+  function updateProfile(field, value) {
+    setProfile((current) => ({ ...current, [field]: value }));
+    setProfileMessage("");
+    setProfileError("");
+  }
+
+  async function persistProfile(value) {
+    const completeProfile = normalizeProfile(value);
+    if (pinRecord) {
+      if (!pinKeyRef.current) throw new Error("Unlock private details before saving this profile.");
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const plaintext = new TextEncoder().encode(JSON.stringify(selectFields(completeProfile, PRIVATE_FIELDS)));
+      const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, pinKeyRef.current, plaintext);
+      const nextRecord = { ...pinRecord, iv: toBase64(iv), ciphertext: toBase64(encrypted) };
+      localStorage.setItem(PRIVATE_KEY, JSON.stringify(nextRecord));
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(selectFields(completeProfile, EMERGENCY_FIELDS)));
+      setPinRecord(nextRecord);
+    } else {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(completeProfile));
+      localStorage.removeItem(PRIVATE_KEY);
+    }
+    setProfile(completeProfile);
+    setProfileSaved(true);
+    setStorageError("");
+    setProfileError("");
+    setProfileMessage("Medical profile saved on this device.");
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    if (pinRecord && !privateUnlocked) {
+      setProfileError("Unlock private details before saving this profile.");
+      return;
+    }
+    if (!profile.fullName.trim()) {
+      setProfileError("Enter the patient's full name before saving.");
+      return;
+    }
+    const today = localDateString();
+    if (profile.dateOfBirth && profile.dateOfBirth > today) {
+      setProfileError("Date of birth cannot be in the future.");
+      return;
+    }
+    const invalidPhone = [profile.emergencyContactPhone, profile.doctorPhone]
+      .some((number) => number.trim() && !phoneUri(number));
+    if (invalidPhone) {
+      setProfileError("Enter a valid phone number or leave the optional phone field blank.");
+      return;
+    }
+    try {
+      await persistProfile(profile);
+    } catch (error) {
+      setStorageError(error.message || "Could not save to this browser. Check available storage and try again.");
+    }
+  }
+
+  function clearProfile() {
+    try {
+      localStorage.removeItem(PROFILE_KEY);
+      localStorage.removeItem(PRIVATE_KEY);
+      setProfile({ ...EMPTY_PROFILE });
+      setProfileSaved(false);
+      setPinRecord(null);
+      setPrivateUnlocked(true);
+      pinKeyRef.current = null;
+      setStorageError("");
+      setProfileError("");
+      setProfileMessage("Medical profile cleared from this device.");
+    } catch {
+      setStorageError("Could not clear this browser's saved profile.");
+    }
+  }
+
+  async function resetDemo() {
+    try {
+      await persistProfile(DEMO_PROFILE);
+      setProfileMessage("Demo profile restored. Replace this sample with your own details.");
+    } catch {
+      setStorageError("Could not save demo data to this browser. Unlock private details if PIN protection is enabled.");
+    }
+  }
+
+  async function protectProfile(pin, confirmation) {
+    if (pin.length < 4) throw new Error("Choose a PIN with at least 4 characters.");
+    if (pin !== confirmation) throw new Error("The PIN entries do not match.");
+    if (!window.crypto?.subtle) throw new Error("This browser does not support Web Crypto PIN protection.");
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await derivePinKey(pin, salt);
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      new TextEncoder().encode(JSON.stringify(selectFields(profile, PRIVATE_FIELDS))),
+    );
+    const record = { salt: toBase64(salt), iv: toBase64(iv), ciphertext: toBase64(encrypted) };
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(selectFields(profile, EMERGENCY_FIELDS)));
+      localStorage.setItem(PRIVATE_KEY, JSON.stringify(record));
+      pinKeyRef.current = key;
+      setPinRecord(record);
+      setPrivateUnlocked(true);
+      setProfileSaved(true);
+      setProfileMessage("Private details are now encrypted on this device.");
+    } catch (error) {
+      throw new Error(error.message || "Could not save PIN protection to this browser.");
+    }
+  }
+
+  async function unlockPrivate(pin) {
+    if (!pinRecord) return;
+    try {
+      const key = await derivePinKey(pin, fromBase64(pinRecord.salt));
+      const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64(pinRecord.iv) }, key, fromBase64(pinRecord.ciphertext));
+      const privateValues = JSON.parse(new TextDecoder().decode(plaintext));
+      pinKeyRef.current = key;
+      setProfile((current) => ({ ...current, ...selectFields(privateValues, PRIVATE_FIELDS) }));
+      setPrivateUnlocked(true);
+      setProfileError("");
+      setProfileMessage("Private details unlocked for this session.");
+    } catch {
+      throw new Error("Incorrect PIN or damaged encrypted data. Private details remain locked.");
+    }
+  }
+
+  async function removePin(pin) {
+    if (!pinRecord) return;
+    let privateValues;
+    try {
+      const key = await derivePinKey(pin, fromBase64(pinRecord.salt));
+      const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64(pinRecord.iv) }, key, fromBase64(pinRecord.ciphertext));
+      privateValues = JSON.parse(new TextDecoder().decode(plaintext));
+    } catch {
+      throw new Error("Incorrect PIN or damaged encrypted data. PIN protection was not removed.");
+    }
+    const completeProfile = normalizeProfile({ ...profile, ...selectFields(privateValues, PRIVATE_FIELDS) });
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(completeProfile));
+      localStorage.removeItem(PRIVATE_KEY);
+      setProfile(completeProfile);
+      setPinRecord(null);
+      setPrivateUnlocked(true);
+      pinKeyRef.current = null;
+      setProfileMessage("PIN protection removed. All profile details are stored unencrypted on this device.");
+    } catch (error) {
+      throw new Error(error.message || "Could not remove PIN protection from this browser.");
+    }
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault();
+    const message = chatInput.trim();
+    if (!message || chatLoading) return;
+    setChatInput("");
+    setChatError("");
+    const isEmergency = EMERGENCY_KEYWORDS.test(message);
+    // Show emergency warning immediately, before any API call.
+    setEmergencyAlert(isEmergency);
+    const nextMessages = [...messages, { role: "user", text: message }];
+    setMessages(nextMessages);
+
+    if (!online) {
+      const offlineReply = isEmergency
+        ? "Call 108 now and follow the emergency dispatcher’s instructions. Stay with the person. This app cannot diagnose or prescribe."
+        : "You are offline. If this may be an emergency, call 108. This app cannot diagnose or recommend medicines.";
+      setMessages([...nextMessages, { role: "assistant", text: offlineReply }]);
+      return;
+    }
+
+    setChatLoading(true);
+    try {
+      // Only the user question and prior pairs are sent. No profile data is attached.
+      const response = await fetch("/api/medical-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history: nextMessages.slice(0, -1) }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.reply) {
+        setChatError(data?.error || "The assistant could not respond. If this is urgent, call 108.");
+        setMessages(nextMessages);
+      } else {
+        setMessages([...nextMessages, { role: "assistant", text: data.reply }]);
+        setChatError("");
+      }
+    } catch (error) {
+      const isTimeout = error.name === "TimeoutError" || error.name === "AbortError";
+      setChatError(isTimeout
+        ? "The assistant took too long. If this is urgent, call 108 now."
+        : "Could not reach the assistant. Check your connection, or call 108 if this is urgent.");
+      setMessages(nextMessages);
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
+  function changeLanguage(value) {
+    setLanguage(value);
+    try {
+      localStorage.setItem(LANGUAGE_KEY, JSON.stringify(value));
+    } catch {
+      setStorageError("Could not save the language choice in this browser.");
+    }
+  }
+
+  const t = translations[language];
+  const offlineLabel = online ? offlineReady ? "Works offline" : "Setting up offline" : "You are offline";
+  const content = page === "dashboard" ? <Dashboard profile={profile} profileSaved={profileSaved} navigate={navigate} openGuide={openGuide} /> :
+    page === "emergency" ? <Emergency profile={profile} openGuide={openGuide} navigate={navigate} t={t} /> :
+    page === "profile" ? <Profile profile={profile} profileSaved={profileSaved} updateProfile={updateProfile} saveProfile={saveProfile} clearProfile={clearProfile} resetDemo={resetDemo} message={profileMessage} error={profileError} pinRecord={pinRecord} privateUnlocked={privateUnlocked} protectProfile={protectProfile} unlockPrivate={unlockPrivate} removePin={removePin} /> :
+    page === "hospitals" ? <HospitalDirectory t={t} /> :
+    page === "medical-id" ? <MedicalId profile={profile} navigate={navigate} t={t} /> :
+    page === "guide" ? <GuidePage guide={activeGuide} onOpen={(id) => id ? openGuide(id) : navigate("guide")} /> :
+    page === "assistant" ? <Assistant messages={messages} input={chatInput} setInput={setChatInput} loading={chatLoading} error={chatError} onSend={sendMessage} onClear={() => { setMessages([]); setChatError(""); setEmergencyAlert(false); }} endRef={chatEndRef} emergencyAlert={emergencyAlert} online={online} /> :
+    <Dashboard profile={profile} profileSaved={profileSaved} navigate={navigate} openGuide={openGuide} />;
+  const pageKey = page === "guide" ? `guide-${selectedGuide || "index"}` : page;
+
+  return <div className="app-shell">
+    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
+      <nav className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" aria-label="Main navigation">
+        <button className="flex min-h-11 items-center gap-2.5" onClick={() => navigate("dashboard")} aria-label="Med Alert home">
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand text-white shadow-sm"><HeartPulse size={23} strokeWidth={2.4} /></span>
+          <span className="text-left text-lg font-extrabold tracking-tight text-ink">med<span className="text-brand">alert</span><span className="ml-1 align-top text-[9px] font-bold uppercase tracking-widest text-slate-400">care</span></span>
+        </button>
+        <div className="hidden items-center gap-1 xl:flex">
+          {NAV_ITEMS.map(({ id, label }) => <button key={id} aria-current={page === id ? "page" : undefined} onClick={() => navigate(id)} className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${page === id ? "bg-rose-50 text-brand" : "text-slate-500 hover:bg-slate-50 hover:text-ink"}`}>{label}</button>)}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:inline-flex ${online ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{offlineLabel}</span>
+          <button type="button" onClick={() => changeLanguage(language === "en" ? "te" : "en")} aria-label="Change language" className="min-h-10 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-ink hover:bg-slate-50">{language === "en" ? "తెలుగు" : "English"}</button>
+          <button onClick={() => navigate("emergency")} className="hidden items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-dark xl:inline-flex"><ShieldAlert size={17} /> Emergency Mode</button>
+        </div>
+        <button aria-label={mobileOpen ? "Close menu" : "Open menu"} aria-expanded={mobileOpen} className="grid h-11 w-11 place-items-center rounded-lg text-ink hover:bg-slate-100 xl:hidden" onClick={() => setMobileOpen((open) => !open)}>{mobileOpen ? <X size={22} /> : <Menu size={22} />}</button>
+      </nav>
+      {mobileOpen && <div className="border-t border-slate-100 bg-white p-3 xl:hidden">
+        <p className="px-3 py-2 text-xs font-semibold text-slate-500">{online ? "Works offline" : "You are offline"}</p>
+        {NAV_ITEMS.map(({ id, label, icon: Icon }) => <button key={id} aria-current={page === id ? "page" : undefined} onClick={() => navigate(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold ${page === id ? "bg-rose-50 text-brand" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={18} />{label}</button>)}
+        <button onClick={() => navigate("emergency")} className="mt-2 flex w-full items-center gap-3 rounded-xl bg-brand px-3 py-3 text-left text-sm font-bold text-white"><ShieldAlert size={18} />Open Emergency Mode</button>
+      </div>}
+    </header>
+
+    <main className="mx-auto min-h-[calc(100vh-160px)] max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
+      {storageError && <div role="alert" className="mb-5 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertCircle size={17} />{storageError}</div>}
+      <p role="status" className={`mb-4 inline-flex rounded-full px-3 py-1 text-[11px] font-bold sm:hidden ${online ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{offlineLabel}</p>
+      <div key={pageKey} className="page-enter">{content}</div>
+    </main>
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-5 text-xs leading-5 text-slate-500 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+        <p className="flex max-w-4xl gap-2"><Shield size={16} className="mt-0.5 shrink-0 text-brand" /><span>{DISCLAIMER}</span></p>
+        <span className="shrink-0 font-semibold text-slate-400">Your health. Your information.</span>
+      </div>
+    </footer>
+  </div>;
+}
+
+function Dashboard({ profile, profileSaved, navigate, openGuide }) {
+  const hasProfile = profileSaved && hasProfileData(profile);
+  const quickLinks = [
+    { title: "Emergency Guide", text: "Clear steps for common emergencies.", icon: CircleHelp, target: "guide", color: "bg-amber-50 text-amber-600" },
+    { title: "Emergency Assistant", text: "Get on-device general safety information.", icon: Bot, target: "assistant", color: "bg-blue-50 text-blue-600" },
+    { title: "Medical Profile", text: "Keep your critical details up to date.", icon: ClipboardPlus, target: "profile", color: "bg-emerald-50 text-emerald-600" },
+    { title: "Medical ID", text: "Preview, print, download, or share your emergency card.", icon: HeartPulse, target: "medical-id", color: "bg-rose-50 text-brand" },
+    { title: "Find Hospitals", text: "Browse hospital addresses and contact details.", icon: Building2, target: "hospitals", color: "bg-indigo-50 text-indigo-600" },
+  ];
+  return <div className="space-y-10">
+    {!hasProfile && <div className="flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-amber-600"><ClipboardPlus size={19} /></span><div><p className="font-bold text-amber-950">Your medical profile is not set up yet.</p><p className="mt-1 text-sm leading-5 text-amber-800">Add critical details so they’re available in Emergency Mode.</p></div></div>
+      <Button variant="outline" onClick={() => navigate("profile")} className="min-h-12 shrink-0 border-amber-200 bg-white text-amber-900 hover:bg-amber-100">Set Up Medical Profile <ArrowRight size={15} /></Button>
+    </div>}
+    <section className="relative overflow-hidden rounded-3xl bg-white px-6 py-8 shadow-card sm:px-10 sm:py-12 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:items-center lg:gap-8">
+      <div className="soft-grid absolute inset-y-0 right-0 hidden w-[43%] opacity-70 lg:block" />
+      <div className="relative max-w-2xl">
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-brand"><span className="h-2 w-2 rounded-full bg-brand" />Ready when it matters</p>
+        <h1 className="max-w-xl text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">Medical information when every second matters.</h1>
+        <p className="mt-5 max-w-xl text-base leading-7 text-slate-500">Keep critical medical details accessible and get immediate emergency guidance when you need it.</p>
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+          <Button variant="danger" onClick={() => navigate("emergency")} className="min-h-12 px-5"><ShieldAlert size={18} />Open Emergency Mode <ArrowRight size={16} /></Button>
+          <Button variant="outline" onClick={() => navigate("profile")} className="min-h-12 px-5"><Plus size={17} />{hasProfile ? "View / Edit Medical Profile" : "Set Up Medical Profile"}</Button>
+        </div>
+      </div>
+      {hasProfile
+        ? <div className="relative mt-8 grid grid-cols-2 gap-3 border-t border-slate-100 pt-6 sm:grid-cols-3 lg:mt-0 lg:grid-cols-2 lg:gap-5 lg:border-0 lg:pt-0">
+          <InfoItem label="Name" value={profile.fullName} />
+          <InfoItem label="Blood group" value={profile.bloodGroup} />
+          <InfoItem label="Allergies" value={profile.allergies} />
+          <InfoItem label="Conditions" value={profile.conditions} />
+          <InfoItem label="Emergency contact" value={profile.emergencyContactName ? `${profile.emergencyContactName}${profile.emergencyContactPhone ? ` · ${profile.emergencyContactPhone}` : ""}` : ""} />
+        </div>
+        : <div className="relative mt-8 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 lg:mt-0"><p className="font-bold text-ink">Your medical profile is not set up yet.</p><p className="mt-1 text-sm leading-5 text-slate-500">Save your details once and they’ll appear here and on your Medical ID.</p></div>}
+    </section>
+
+    <EmergencyContacts />
+
+    <section>
+      <div className="mb-4 flex items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-brand">Your essentials</p><h2 className="mt-1 text-xl font-bold text-ink">Medical snapshot</h2></div><button onClick={() => navigate("profile")} className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm font-bold text-brand hover:text-brand-dark">Manage profile <ArrowRight className="ml-1 inline" size={15} /></button></div>
+      {hasProfile ? <Card className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <InfoItem label="Medical conditions" value={profile.conditions} />
+        <InfoItem label="Current medications" value={profile.medications} />
+        <InfoItem label="Emergency contact" value={profile.emergencyContactName ? `${profile.emergencyContactName}${profile.emergencyContactPhone ? ` · ${profile.emergencyContactPhone}` : ""}${profile.emergencyContactRelationship ? ` · ${profile.emergencyContactRelationship}` : ""}` : ""} />
+        <InfoItem label="Doctor / hospital" value={profile.doctorName ? `${profile.doctorName}${profile.doctorPhone ? ` · ${profile.doctorPhone}` : ""}` : ""} />
+      </Card> : <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">Medical snapshot details will appear after you set up your profile.</p>}
+    </section>
+
+    <section>
+      <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[0.15em] text-brand">Get prepared</p><h2 className="mt-1 text-xl font-bold text-ink">Quick access</h2></div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {quickLinks.map(({ title, text, icon: Icon, target, color }) => <button key={target} onClick={() => navigate(target)} className="card-interactive flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-5 text-left shadow-card">
+          <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${color}`}><Icon size={22} /></span><span className="min-w-0 flex-1"><span className="block font-bold text-ink">{title}</span><span className="mt-1 block text-sm leading-5 text-slate-500">{text}</span></span><ChevronRight className="shrink-0 text-slate-300" size={19} />
+        </button>)}
+      </div>
+    </section>
+
+    <section>
+      <div className="mb-4 flex items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-brand">Know what to do</p><h2 className="mt-1 text-xl font-bold text-ink">Common emergencies</h2></div><button onClick={() => navigate("guide")} className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm font-bold text-brand hover:text-brand-dark">All guides <ArrowRight className="ml-1 inline" size={15} /></button></div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{QUICK_CARDS.map((card) => {
+        const guide = GUIDES.find((item) => item.id === card.guideId);
+        const Icon = card.icon;
+        return <Card key={card.title} className="card-interactive flex flex-col">
+          <span className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-rose-50 text-brand"><Icon size={20} /></span><h3 className="font-bold text-ink">{card.title}</h3><p className="mt-1.5 flex-1 text-sm leading-5 text-slate-500">{card.description}</p>
+          <button onClick={() => openGuide(guide.id)} className="mt-3 inline-flex min-h-11 items-center gap-1.5 self-start rounded-lg px-2 text-sm font-bold text-brand">View Guide <ArrowRight size={15} /></button>
+        </Card>;
+      })}</div>
+    </section>
+  </div>;
+}
+
+function Emergency({ profile, openGuide, navigate, t }) {
+  const hasCriticalInfo = [profile.fullName, profile.bloodGroup, profile.allergies, profile.conditions, profile.medications, profile.emergencyContactName, profile.emergencyContactPhone].some((value) => value.trim());
+  return <div className="mx-auto max-w-5xl">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">{t.fastAccess}</p><h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">{t.emergencyMode}</h1></div><Button variant="outline" onClick={() => navigate("dashboard")}><ChevronRight className="rotate-180" size={17} />{t.backToDashboard}</Button></div>
+    {!hasCriticalInfo && <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-semibold leading-5 text-amber-900">{t.noDetails}</p><Button variant="outline" onClick={() => navigate("profile")} className="shrink-0 border-amber-200 bg-white text-amber-900 hover:bg-amber-100">{t.addDetails} <ArrowRight size={15} /></Button></div>}
+    <div className="mb-7"><EmergencyContacts t={t} /></div>
+    <div className="emergency-panel overflow-hidden rounded-3xl border border-rose-200 bg-white">
+      <div className="emergency-critical flex items-center gap-3 px-5 py-4 text-white sm:px-8 sm:py-5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/15"><ShieldAlert size={22} /></span><div><p className="font-extrabold tracking-wide">{t.criticalInfo}</p><p className="text-xs text-white/85">{t.shareScreen}</p></div></div>
+      <div className="grid gap-0 sm:grid-cols-2">
+        <div className="border-b border-slate-100 p-5 sm:border-r sm:px-8 sm:py-7"><InfoItem label={t.fullName} value={profile.fullName} prominent /></div>
+        <div className="border-b border-slate-100 p-5 sm:px-8 sm:py-7"><InfoItem label={t.bloodGroup} value={profile.bloodGroup} prominent /></div>
+        <div className="border-b border-slate-100 p-5 sm:border-r sm:px-8 sm:py-7 sm:pb-8"><InfoItem label={t.allergies} value={profile.allergies} prominent allergyTags /></div>
+        <div className="border-b border-slate-100 p-5 sm:px-8 sm:py-7 sm:pb-8"><InfoItem label={t.conditions} value={profile.conditions} prominent /></div>
+        <div className="border-b border-slate-100 p-5 sm:col-span-2 sm:px-8 sm:py-7"><InfoItem label={t.medications} value={profile.medications} prominent /></div>
+        <div className="p-5 sm:col-span-2 sm:px-8 sm:py-7"><InfoItem label={t.emergencyContact} value={profile.emergencyContactName ? `${profile.emergencyContactName}${profile.emergencyContactPhone ? ` · ${profile.emergencyContactPhone}` : ""}` : ""} prominent /></div>
+      </div>
+      <div className="border-t border-slate-100 bg-slate-50 p-5 sm:p-8">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <a href="tel:108" className="flex min-h-[76px] items-center justify-center gap-2 rounded-xl bg-brand px-4 text-center text-sm font-extrabold text-white transition hover:bg-brand-dark sm:col-span-2"><Phone size={19} />{t.emergencyCall}</a>
+          <ContactAction number={profile.emergencyContactPhone} label={t.callEmergencyContact} />
+        </div>
+        <Button variant="outline" onClick={() => openGuide("chest-pain")} className="mt-3 w-full border-slate-200 sm:w-auto"><CircleHelp size={17} />{t.viewGuide} <ChevronDown size={16} /></Button>
+      </div>
+    </div>
+    <div className="mt-8"><NearbyHospitals navigate={navigate} /></div>
+    <p className="mt-4 text-center text-xs leading-5 text-slate-500">{t.emergencyWarning}</p>
+  </div>;
+}
+
+function Profile({ profile, profileSaved, updateProfile, saveProfile, clearProfile, resetDemo, message, error, pinRecord, privateUnlocked, protectProfile, unlockPrivate, removePin }) {
+  const today = localDateString();
+  const field = (key, props) => <Field {...props} value={profile[key] || ""} onChange={(event) => updateProfile(key, event.target.value)} />;
+  const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"];
+  const genders = ["Female", "Male", "Non-binary", "Prefer not to say", "Unknown"];
+  const relationships = ["Parent", "Spouse / partner", "Sibling", "Child", "Friend", "Other"];
+  const [protectEnabled, setProtectEnabled] = useState(Boolean(pinRecord));
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [currentPin, setCurrentPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  useEffect(() => { setProtectEnabled(Boolean(pinRecord)); }, [pinRecord]);
+  const completenessData = calculateProfileCompleteness(profile);
+  const completeCount = completenessData.count;
+  const completeness = completenessData.percent;
+  async function submitPinSetup() {
+    setPinError("");
+    try {
+      await protectProfile(newPin, confirmPin);
+      setProtectEnabled(true);
+      setNewPin("");
+      setConfirmPin("");
+    } catch (pinFailure) {
+      setPinError(pinFailure.message);
+    }
+  }
+  async function unlockForm(event) {
+    event.preventDefault();
+    setPinError("");
+    try {
+      await unlockPrivate(currentPin);
+      setCurrentPin("");
+    } catch (pinFailure) {
+      setPinError(pinFailure.message);
+    }
+  }
+  async function removeProtection() {
+    setPinError("");
+    try {
+      await removePin(currentPin);
+      setProtectEnabled(false);
+      setCurrentPin("");
+    } catch (pinFailure) {
+      setPinError(pinFailure.message);
+    }
+  }
+  function handleSave(event) {
+    if (protectEnabled && !pinRecord) {
+      event.preventDefault();
+      setPinError("Enable PIN protection before saving the profile.");
+      return;
+    }
+    setPinError("");
+    saveProfile(event);
+  }
+  function handleResetDemo() {
+    if (protectEnabled && !pinRecord) {
+      setPinError("Enable PIN protection before saving the profile.");
+      return;
+    }
+    resetDemo();
+  }
+  if (pinRecord && !privateUnlocked) {
+    return <div className="mx-auto max-w-4xl">
+      <SectionTitle eyebrow="Your information" title="Medical Profile" description="Emergency details remain available to responders. Unlock to view private details." action={<span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700"><Shield size={14} />Stored locally</span>} />
+      <Card>
+        <form onSubmit={unlockForm} className="max-w-md">
+          <h2 className="font-bold text-ink">Unlock private details</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Enter your PIN to decrypt your date of birth, doctor details, and private notes on this device.</p>
+          <Field label="PIN" type="password" value={currentPin} onChange={(event) => setCurrentPin(event.target.value)} />
+          {pinError && <p role="alert" className="mt-3 text-sm font-semibold text-rose-700">{pinError}</p>}
+          <Button type="submit" variant="danger" className="mt-4">Unlock private details</Button>
+        </form>
+      </Card>
+      <p className="mt-4 text-xs leading-5 text-slate-500">Forgotten PINs cannot be recovered. Your encrypted private details would be lost.</p>
+    </div>;
+  }
+  return <div className="mx-auto max-w-4xl">
+    <SectionTitle eyebrow="Your information" title="Medical Profile" description="Add and maintain accurate details for quick emergency access." action={<span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700"><Shield size={14} />Stored locally</span>} />
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-3"><p className="font-bold text-ink">Profile {completeness}% complete</p><p className="text-xs text-slate-500">{completeCount} of 7 emergency fields</p></div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand transition-all" style={{ width: `${completeness}%` }} /></div>
+    </div>
+    <form onSubmit={handleSave}>
+      <div className="space-y-4">
+        <Card>
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700"><UserRound size={20} /></span><div><h2 className="font-bold text-ink">Personal Information</h2><p className="mt-0.5 text-xs text-slate-500">Enter the patient's identifying details.</p></div></div>
+          <div className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+            {field("fullName", { label: "Full Name", placeholder: "Patient's full legal name", required: true })}
+            {field("dateOfBirth", { label: "Date of Birth", type: "date", max: today })}
+            {field("gender", { label: "Gender", placeholder: "Select gender", options: genders })}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-brand"><HeartPulse size={20} /></span><div><h2 className="font-bold text-ink">Emergency Medical Information</h2><p className="mt-0.5 text-xs text-slate-500">Only include accurate, current medical information.</p></div></div>
+          <div className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+            {field("bloodGroup", { label: "Blood Group", placeholder: "Select blood group", options: bloodGroups })}
+            <div className="hidden sm:block" />
+            <div className="sm:col-span-2">
+              {field("allergies", { label: "Allergies", placeholder: "Separate allergies with commas or new lines", rows: 2, disabled: profile.allergies === "None known" })}
+              <label className="mt-2 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={profile.allergies === "None known"} onChange={(event) => updateProfile("allergies", event.target.checked ? "None known" : "")} className="h-4 w-4 accent-[#e8414f]" />None known</label>
+            </div>
+            <div className="sm:col-span-2">
+              {field("conditions", { label: "Medical Conditions", placeholder: "Conditions emergency responders should know", rows: 2, disabled: profile.conditions === "None known" })}
+              <label className="mt-2 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={profile.conditions === "None known"} onChange={(event) => updateProfile("conditions", event.target.checked ? "None known" : "")} className="h-4 w-4 accent-[#e8414f]" />None known</label>
+            </div>
+            <div className="sm:col-span-2">
+              {field("medications", { label: "Current Medications", placeholder: "List current medications", rows: 2, disabled: profile.medications === "None known" })}
+              <label className="mt-2 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={profile.medications === "None known"} onChange={(event) => updateProfile("medications", event.target.checked ? "None known" : "")} className="h-4 w-4 accent-[#e8414f]" />None known</label>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700"><Phone size={20} /></span><div><h2 className="font-bold text-ink">Emergency Contact</h2><p className="mt-0.5 text-xs text-slate-500">A trusted person who can be contacted in an emergency.</p></div></div>
+          <div className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+            {field("emergencyContactName", { label: "Contact Name", placeholder: "Full name" })}
+            {field("emergencyContactPhone", { label: "Contact Phone", placeholder: "Phone number", type: "tel", inputMode: "tel" })}
+            {field("emergencyContactRelationship", { label: "Relationship", placeholder: "Select relationship", options: relationships })}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><ClipboardPlus size={20} /></span><div><h2 className="font-bold text-ink">Doctor Information</h2></div></div>
+          <div className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+            {field("doctorName", { label: "Doctor Name", placeholder: "Doctor or clinic name" })}
+            {field("doctorPhone", { label: "Doctor Phone", placeholder: "Phone number", type: "tel", inputMode: "tel" })}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-5"><h2 className="font-bold text-ink">Additional Information</h2></div>
+          {field("notes", { label: "Important Medical Notes", placeholder: "Additional information emergency responders should know", rows: 4 })}
+        </Card>
+        <Card>
+          <div className="flex items-start gap-3">
+            <input id="protect-profile" type="checkbox" checked={protectEnabled} disabled={Boolean(pinRecord)} onChange={(event) => setProtectEnabled(event.target.checked)} className="mt-1 h-4 w-4 accent-[#e8414f]" />
+            <div className="min-w-0 flex-1">
+              <label htmlFor="protect-profile" className="font-bold text-ink">Protect with PIN</label>
+              <p className="mt-1 text-sm leading-5 text-slate-600">Emergency details stay readable on this device. Date of birth, doctor details, and notes are encrypted when a PIN is set.</p>
+              {protectEnabled && !pinRecord && <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="Create PIN (4+ characters)" type="password" value={newPin} onChange={(event) => setNewPin(event.target.value)} />
+                <Field label="Confirm PIN" type="password" value={confirmPin} onChange={(event) => setConfirmPin(event.target.value)} />
+                <Button type="button" variant="danger" onClick={submitPinSetup} className="sm:col-span-2 sm:justify-self-start">Enable PIN protection</Button>
+              </div>}
+              {pinRecord && <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                <Field label="Current PIN to remove protection" type="password" value={currentPin} onChange={(event) => setCurrentPin(event.target.value)} />
+                <Button type="button" variant="outline" onClick={removeProtection}>Remove PIN</Button>
+              </div>}
+              <p className="mt-3 text-xs leading-5 text-amber-800">A forgotten PIN cannot be recovered. The encrypted private details would be lost.</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+      {(error || pinError) && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error || pinError}</p>}
+      {message && <p role="status" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><Check size={17} />{message}</p>}
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <Button type="submit" variant="danger" className="min-h-12 w-full px-5 sm:w-auto"><Save size={17} />{profileSaved ? "UPDATE MEDICAL PROFILE" : "SAVE MEDICAL PROFILE"}</Button>
+        <Button variant="outline" onClick={clearProfile} className="min-h-12 w-full px-5 sm:w-auto"><X size={17} />CLEAR FORM</Button>
+        <Button variant="subtle" onClick={handleResetDemo} className="min-h-12 w-full px-5 sm:ml-auto sm:w-auto">Reset demo data</Button>
+      </div>
+    </form>
+    <p className="mt-4 text-xs leading-5 text-slate-500">Emergency details are stored unencrypted on this device so responders can read them; private details are encrypted if a PIN is set.</p>
+  </div>;
+}
+
+
 function GuidePage({ guide, onOpen }) {
   return <div>
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 sm:px-5">
