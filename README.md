@@ -6,12 +6,12 @@ A responsive, privacy-conscious emergency medical information web application (P
 
 - Node.js 18 or newer
 - A modern browser with Web Crypto support for PIN protection
-- Google Gemini API key (`GEMINI_API_KEY`) for AI Medical Assistant features
+- Groq API key (`GROQ_API_KEY`) for AI Medical Assistant features
 
 ## Architecture & Data Flow
 
 - **Frontend**: React + Vite single page application with PWA capabilities.
-- **Backend API**: Express.js server providing `/api/medical-assistant` endpoint to interface securely with Google Gemini.
+- **Backend API**: Express.js server providing `/api/medical-assistant` endpoint to interface securely with Groq API (`llama-3.3-70b-versatile`).
 - **Privacy & Storage**: 
   - Medical profile data stays in browser `localStorage`.
   - Emergency fields (`fullName`, `bloodGroup`, `allergies`, `conditions`, `medications`, `emergencyContactName`, `emergencyContactPhone`) remain unencrypted for fast access during emergencies.
@@ -30,10 +30,10 @@ cd ../server && npm install
 2. Set environment variable:
 ```sh
 # On Windows PowerShell
-$env:GEMINI_API_KEY="your-gemini-api-key"
+$env:GROQ_API_KEY="your-groq-api-key"
 
 # On Linux/macOS
-export GEMINI_API_KEY="your-gemini-api-key"
+export GROQ_API_KEY="your-groq-api-key"
 ```
 
 3. Start dev servers:
@@ -45,7 +45,7 @@ npm start --prefix server
 npm run dev --prefix client
 ```
 
-When `GEMINI_API_KEY` is set, online AI assistant queries invoke the backend service. If offline or if the backend is unreachable, the assistant gracefully falls back to local general safety guidance.
+When `GROQ_API_KEY` is set, online AI assistant queries invoke the backend service. If offline or if the backend is unreachable, the assistant gracefully falls back to local general safety guidance.
 
 ## Testing
 
@@ -83,7 +83,7 @@ The Digital Medical ID renders a printable card and downloadable QR code. The QR
 
 Import this repository into Vercel. The included `vercel.json` automatically routes `/api/*` endpoints to the Express serverless function at `api/[...path].js` and all other paths to the Vite SPA build.
 
-Ensure `GEMINI_API_KEY` is added to your Vercel Project Environment Variables.
+Ensure `GROQ_API_KEY` is added to your Vercel Project Environment Variables.
 
 ## Medical Safety Disclaimer
 
