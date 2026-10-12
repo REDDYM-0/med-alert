@@ -58,7 +58,7 @@ app.post("/api/medical-assistant", async (req, res) => {
     return res.status(503).json({ error: "The AI assistant is not configured. Set GEMINI_API_KEY on the server to enable it." });
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   let upstream;
   try {

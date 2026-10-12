@@ -114,7 +114,7 @@ describe("Med Alert medical assistant API", () => {
 
     assert.equal(result.status, 200);
     assert.deepEqual(result.data, { reply: "Call emergency services now." });
-    assert.equal(capturedRequest.url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+    assert.equal(capturedRequest.url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent");
     assert.equal(capturedRequest.options.headers["x-goog-api-key"], "test-gemini-secret");
     assert.equal(capturedRequest.url.includes("test-gemini-secret"), false);
     const payload = JSON.parse(capturedRequest.options.body);
