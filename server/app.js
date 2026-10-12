@@ -62,7 +62,7 @@ app.post("/api/medical-assistant", async (req, res) => {
     return res.status(503).json({ error: "The AI assistant is not configured. Set GROQ_API_KEY on the server to enable it." });
   }
 
-  const model = "llama-3.3-70b-versatile";
+  const model = "openai/gpt-oss-120b";
   const url = "https://api.groq.com/openai/v1/chat/completions";
   let upstream;
   try {
