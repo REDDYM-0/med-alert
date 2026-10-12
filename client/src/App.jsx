@@ -12,19 +12,22 @@ import { translations } from "./translations";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: Activity },
-  { id: "emergency", label: "Emergency", icon: ShieldAlert },
   { id: "profile", label: "Medical Profile", icon: ClipboardPlus },
-  { id: "hospitals", label: "Hospitals", icon: Building2 },
   { id: "medical-id", label: "Medical ID", icon: ClipboardPlus },
+  { id: "hospitals", label: "Hospitals", icon: Building2 },
   { id: "guide", label: "Emergency Guide", icon: CircleHelp },
   { id: "assistant", label: "AI Assistant", icon: MessageCircle },
 ];
+
+const EMERGENCY_NAV_ITEM = { id: "emergency", label: "Emergency Mode", icon: ShieldAlert };
+
+const ALL_PAGES = [...NAV_ITEMS, EMERGENCY_NAV_ITEM];
+const PAGE_IDS = new Set(ALL_PAGES.map(({ id }) => id));
 
 const DISCLAIMER = "Med Alert provides general emergency information and does not replace professional medical advice or emergency services.";
 const PROFILE_KEY = "med-alert-profile";
 const PRIVATE_KEY = "med-alert-private";
 const LANGUAGE_KEY = "med-alert-language";
-const PAGE_IDS = new Set(NAV_ITEMS.map(({ id }) => id));
 const EMERGENCY_FIELDS = ["fullName", "bloodGroup", "allergies", "conditions", "medications", "emergencyContactName", "emergencyContactPhone"];
 const PRIVATE_FIELDS = ["dateOfBirth", "doctorName", "doctorPhone", "notes", "gender"];
 const EMERGENCY_KEYWORDS = /\b(chest\s*pain|not breathing|unconscious|severe bleeding|choking|seizure|stroke|overdose|suicide|poison(?:ing)?|can't breathe|cannot breathe)\b/i;
@@ -1000,29 +1003,142 @@ function App() {
     <Dashboard profile={profile} profileSaved={profileSaved} navigate={navigate} openGuide={openGuide} />;
   const pageKey = page === "guide" ? `guide-${selectedGuide || "index"}` : page;
 
-  return <div className="app-shell">
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-      <nav className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" aria-label="Main navigation">
-        <button className="flex min-h-11 items-center gap-2.5" onClick={() => navigate("dashboard")} aria-label="Med Alert home">
-          <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand text-white shadow-sm"><HeartPulse size={23} strokeWidth={2.4} /></span>
-          <span className="text-left text-lg font-extrabold tracking-tight text-ink">med<span className="text-brand">alert</span><span className="ml-1 align-top text-[9px] font-bold uppercase tracking-widest text-slate-400">care</span></span>
-        </button>
-        <div className="hidden items-center gap-1 xl:flex">
-          {NAV_ITEMS.map(({ id, label }) => <button key={id} aria-current={page === id ? "page" : undefined} onClick={() => navigate(id)} className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${page === id ? "bg-rose-50 text-brand" : "text-slate-500 hover:bg-slate-50 hover:text-ink"}`}>{label}</button>)}
+  return (
+    <div className="app-shell">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
+      <nav className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8" aria-label="Main navigation">
+        {/* Far Left: Med Alert logo and brand title */}
+        <div className="flex shrink-0 items-center">
+          <button className="flex min-h-11 items-center gap-2.5 text-left focus:outline-none" onClick={() => navigate("dashboard")} aria-label="Med Alert home">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand text-white shadow-sm transition hover:bg-brand-dark">
+              <HeartPulse size={23} strokeWidth={2.4} />
+            </span>
+            <span className="text-lg font-extrabold tracking-tight text-ink">
+              med<span className="text-brand">alert</span>
+              <span className="ml-1 align-top text-[9px] font-bold uppercase tracking-widest text-slate-400">care</span>
+            </span>
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:inline-flex ${online ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{offlineLabel}</span>
-          <button type="button" onClick={() => changeLanguage(language === "en" ? "te" : "en")} aria-label="Change language" className="min-h-10 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-ink hover:bg-slate-50">{language === "en" ? "తెలుగు" : "English"}</button>
-          <button onClick={() => navigate("emergency")} className="hidden items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-dark xl:inline-flex"><ShieldAlert size={17} /> Emergency Mode</button>
+
+        {/* Middle Area: Regular navigation items with balanced, consistent spacing */}
+        <div className="hidden flex-1 items-center justify-center gap-1 xl:flex">
+          {NAV_ITEMS.map(({ id, label }) => {
+            const navLabel = t?.nav?.[id] || label;
+            const isActive = page === id;
+            return (
+              <button
+                key={id}
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => navigate(id)}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  isActive
+                    ? "bg-rose-50 text-brand shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100/80 hover:text-ink"
+                }`}
+              >
+                {navLabel}
+              </button>
+            );
+          })}
         </div>
-        <button aria-label={mobileOpen ? "Close menu" : "Open menu"} aria-expanded={mobileOpen} className="grid h-11 w-11 place-items-center rounded-lg text-ink hover:bg-slate-100 xl:hidden" onClick={() => setMobileOpen((open) => !open)}>{mobileOpen ? <X size={22} /> : <Menu size={22} />}</button>
+
+        {/* Far Right: Language switch, status, and prominent Emergency Mode button */}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <span className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold md:inline-flex ${online ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+            {offlineLabel}
+          </span>
+          <button
+            type="button"
+            onClick={() => changeLanguage(language === "en" ? "te" : "en")}
+            aria-label="Change language"
+            className="min-h-10 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-ink transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            {language === "en" ? "తెలుగు" : "English"}
+          </button>
+          
+          <button
+            onClick={() => navigate("emergency")}
+            className="hidden items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-sm ring-2 ring-brand/20 transition hover:bg-brand-dark sm:inline-flex"
+            aria-label="Emergency Mode"
+          >
+            <ShieldAlert size={18} strokeWidth={2.4} />
+            <span>{t?.emergencyMode || "Emergency Mode"}</span>
+          </button>
+
+          <button
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            className="grid h-11 w-11 place-items-center rounded-lg text-ink hover:bg-slate-100 xl:hidden"
+            onClick={() => setMobileOpen((open) => !open)}
+          >
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
       </nav>
-      {mobileOpen && <div className="border-t border-slate-100 bg-white p-3 xl:hidden">
-        <p className="px-3 py-2 text-xs font-semibold text-slate-500">{online ? "Works offline" : "You are offline"}</p>
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => <button key={id} aria-current={page === id ? "page" : undefined} onClick={() => navigate(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold ${page === id ? "bg-rose-50 text-brand" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={18} />{label}</button>)}
-        <button onClick={() => navigate("emergency")} className="mt-2 flex w-full items-center gap-3 rounded-xl bg-brand px-3 py-3 text-left text-sm font-bold text-white"><ShieldAlert size={18} />Open Emergency Mode</button>
-      </div>}
-    </header>
+
+      {/* Mobile Drawer */}
+      {mobileOpen && (
+        <div className="border-t border-slate-100 bg-white px-4 py-3 shadow-lg xl:hidden">
+          <div className="mb-2 flex items-center justify-between px-2 py-1">
+            <p className="text-xs font-semibold text-slate-500">{online ? "Works offline" : "You are offline"}</p>
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${online ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+              {offlineLabel}
+            </span>
+          </div>
+
+          {/* Quick Emergency button in mobile drawer */}
+          <div className="mb-3 sm:hidden">
+            <button
+              onClick={() => {
+                navigate("emergency");
+                setMobileOpen(false);
+              }}
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-4 py-3 text-center text-sm font-bold text-white shadow-sm transition hover:bg-brand-dark"
+            >
+              <ShieldAlert size={19} strokeWidth={2.4} />
+              <span>{t?.emergencyMode || "Emergency Mode"}</span>
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+              const navLabel = t?.nav?.[id] || label;
+              const isActive = page === id;
+              return (
+                <button
+                  key={id}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => {
+                    navigate(id);
+                    setMobileOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
+                    isActive ? "bg-rose-50 text-brand" : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <Icon size={18} className={isActive ? "text-brand" : "text-slate-400"} />
+                  {navLabel}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Emergency button visible at bottom of mobile drawer for tablet view as well */}
+          <div className="mt-3 hidden border-t border-slate-100 pt-3 sm:block">
+            <button
+              onClick={() => {
+                navigate("emergency");
+                setMobileOpen(false);
+              }}
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-4 py-2.5 text-center text-sm font-bold text-white shadow-sm hover:bg-brand-dark"
+            >
+              <ShieldAlert size={18} strokeWidth={2.4} />
+              <span>{t?.emergencyMode || "Emergency Mode"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+      </header>
 
     <main className="mx-auto min-h-[calc(100vh-160px)] max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
       {storageError && <div role="alert" className="mb-5 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><AlertCircle size={17} />{storageError}</div>}
@@ -1035,7 +1151,8 @@ function App() {
         <span className="shrink-0 font-semibold text-slate-400">Your health. Your information.</span>
       </div>
     </footer>
-  </div>;
+  </div>
+  );
 }
 
 function Dashboard({ profile, profileSaved, navigate, openGuide }) {
